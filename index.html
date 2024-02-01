@@ -1,12 +1,647 @@
 <!DOCTYPE html>
-
 <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="initial-scale=1, width=device-width">
-        <title>침카드 (규칙): 침착맨 카드 팬게임</title>
-    </head>
-    <body>
-      hellow hw
-    </body>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1, width=device-width">
+    <!-- maximum-scale=1 iphone no zooming, but android no pinch zoom-->
+    <title>Game Interface</title>
+
+    <style>
+        body {
+            background-color: #333;
+            color: #fff;
+        }
+
+        input {
+            width:80px;
+        }
+
+        input[type='text'],
+        input[type='password'],
+        testarea {
+            font-size: 16px;
+        }
+
+        button {
+            font-size: 16px;
+        }
+
+        select {
+            font-size: 16px;
+        }
+
+        /* #messages {
+            border: 5px solid black;
+        } */
+
+        ::backdrop {
+        background-color: #222;
+        opacity: 0.75;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 10px solid white;
+            border-bottom-color: black;
+            border-radius: 50%;
+            animation:rotate 1s linear infinite;
+        }
+        @keyframes rotate {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 0px 0px;
+            grid-template-areas:
+                ". div1 ."
+                "div2 . div3";
+            position: relative;
+            max-width: 400px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Game Interface</h1>
+
+    <div id="newuser" hidden>
+        <input type="text" id="newusername" placeholder="아이디">
+        <input type="password" id="newpassword" placeholder="비밀번호">
+        <select id="newfaction">
+            <option value="1">위</option>
+            <option value="2">촉</option>
+            <option value="3">오</option>
+        </select>
+        <select id="newcastle">
+            <option value="1">중원</option>
+            <option value="2">익주</option>
+            <option value="3">양주</option>
+        </select>
+        <button onclick="makenewuser()">생성</button>
+        <div style="margin-top: 10px;">※각 지역 별 가장 큰 세력의 마을은 자원생산 1.3배, 방어력 1.5배의 이득을 얻습니다.</div>
+        <div><br></div>
+    </div>
+
+    <div>
+        <input type="text" id="username" placeholder="아이디" autofocus>
+        <input type="password" id="password" placeholder="비밀번호">
+        <button onclick="load()">Load</button>
+        <button onclick="newuser()">New</button>
+    </div>
+
+    <br>
+
+    <dialog>
+        <div class="spinner"></div>
+        <div>로딩중</div>
+    </dialog>
+    <div id="villages"></div>
+    <div id="villageinfo"></div>
+
+    <form id="actionForm" hidden>
+        <select id="actionSelect" onchange="handleActionChange()">
+            <option value="send">출진</option>
+            <option value="conquer">점령</option>
+            <option value="raid">정벌</option>
+            <option value="supply">수송</option>
+        </select>
+
+        <div id="inputsContainer">
+            <!-- The input fields will be added here dynamically -->
+        </div>
+
+        <button id="sendButton" type="button" onclick="handleSubmit()" hidden>출진</button>
+        <div id="sendTime"></div>
+        <br>
+        <div id="sendHelp" hidden style="margin-bottom: 15px;">
+            <div>같은 세력은 공격 할 수 없습니다.</div>
+            <div>같은 (다른) 지역은 보병 기준 20분 (60분) 걸립니다.</div>
+            <div>기병은 3배 빠릅니다. 혼합은 평균시간이 걸립니다.</div>
+            <div>점령은 4배의 병사가 필요합니다. 정벌은 자원을 절반 약탈해옵니다.</div>
+            <div>성벽은 단계당 20의 방어병력을 줍니다.</div>
+            <div>출진 명령에는 병사당 1의 쌀이 소모됩니다.</div>
+        </div>
+    </form>
+
+    <div id="messages"></div>
+    <div id="mainmap"></div>
+
+    <script>
+        let currentVillageId = null;
+        let intervalIdForConstruction = null;
+        let intervalIdForRecruit = null;
+
+        const infos = {
+            resource: {
+                wood: "💰금",
+                food: "🌾쌀"
+            },
+            building: {
+                town: "🏰현청",
+                timbercamp: "⚖️시장",
+                farm: "👨🏿‍🌾농장",
+                barrack: "💂병영",
+                wall: "🧱성벽",
+            },
+            branch: {
+                infantry: "🗡️보병",
+                cavalry: "🏇기병"
+            }
+        }
+
+        const upgradecost = {
+            "town":       {0: [1,0], 1: [1,1], 2: [3,3], 3: [3**2,3**2], 4: [3**3,3**3], 5: [3**4,3**4], 6: [3**5,3**5], 7: [3**6,3**6], 8: [3**7,3**7], 9: [3**8,3**8]},
+            "farm":       {0: [1,0], 1: [1,0], 2: [2,1], 3: [2**2,2**1], 4: [2**3,2**2], 5: [2**4,2**3], 6: [2**5,2**4], 7: [2**6,2**5], 8: [2**7,2**6], 9: [2**8,2**7]},
+            "timbercamp": {0: [0,1], 1: [0,1], 2: [1,2], 3: [2**1,2**2], 4: [2**2,2**3], 5: [2**3,2**4], 6: [2**4,2**5], 7: [2**5,2**6], 8: [2**6,2**7], 9: [2**7,2**8]},
+            "barrack":    {0: [2,2], 1: [2**2,2**2], 2: [2**3,2**3], 3: [2**4,2**4], 4: [2**5,2**5], 5: [2**6,2**6], 6: [2**7,2**7], 7: [2**8,2**8], 8: [2**9,2**9], 9: [2**10,2**10]},
+            "wall":       {0: [4,0], 1: [8,1], 2: [2**4,2**1], 3: [2**5,2**2], 4: [2**6, 2**3], 5: [2**7,2**4], 6: [2**8,2**5], 7: [2**9,2**6], 8: [2**10,2**7], 9: [2**11,2**8]},
+        }
+
+        const woodspeed = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10}
+        const foodspeed = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10}
+
+        // {barracklv: [foodcost, recruitsize, time(minutes)]}
+        const recruitcost = {0:[999, 1, 999], 1:[5, 1, 5], 2:[8, 2, 8], 3:[16, 4, 16], 4:[32, 8, 32], 5:[64, 16, 64], 6:[120, 40, 120], 7:[240, 80, 240], 8:[480, 160, 480], 9:[960, 320, 960], 10:[2100, 700, 2100]}
+
+        const factions = {1: "위", 2: "촉", 3: "오"}
+        const factioncolors= {1: "#000080", 2:"#008000", 3: "#c00000"}
+        const castles = {1: "중원", 2: "익주", 3: "양주"}
+
+        const dialog = document.querySelector("dialog")
+
+        function fetchData(url, data) {
+            dialog.showModal();
+            return fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                dialog.close();
+                if (data.status === 'failed') {
+                    alert(data.message);
+                } else {
+                    return data;
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        }
+
+        function load(chosenvillage = null) {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            let data = {username, password}
+
+            if (chosenvillage !== null) {
+                data["villageid"] = chosenvillage
+            }
+
+            // document.getElementById('villageinfo').innerHTML = `로딩중...`;
+
+            fetchData('/load', data)
+            .then(data => {
+                displayVillages(data.villagelist, data.faction, chosenvillage);
+                displayVillageInfo(data.villageinfo);
+                displayMessages(data.report)
+                document.getElementById('actionForm').hidden = false;
+            });
+        }
+
+        function displayVillages(villagelist, factionid, chosenvillage = null) {
+            const container = document.getElementById('villages');
+            container.innerHTML = '';
+
+            const factionDiv = document.createElement('div');
+            factionDiv.innerHTML = `세력: ${factions[factionid]}나라`
+            container.appendChild(factionDiv)
+
+            const label = document.createElement('label');
+            label.innerHTML = `마을: `
+            container.appendChild(label)
+
+            const select = document.createElement('select');
+            select.onchange = () => selectVillage(select.value);
+
+            villagelist.forEach((villageId, index) => {
+                const option = document.createElement('option');
+                option.value = villageId;
+                option.text = `${villageId} 현`;
+
+                // Set the first option to be selected
+                if (index === 0 && chosenvillage === null) {
+                    option.selected = true;
+                    currentVillageId = parseInt(villageId)
+                    //selectVillage(villageId);
+                } else if (chosenvillage == option.value) {
+                    option.selected = true;
+                }
+
+                select.appendChild(option);
+            });
+
+            container.appendChild(select);
+
+
+        }
+
+        function displayVillageInfo(villageinfo) {
+            const container = document.getElementById('villageinfo');
+            container.innerHTML = '';
+
+            const castleDiv = document.createElement('div');
+            castleDiv.innerHTML = `위치: ${castles[villageinfo["castleid"]]} &nbsp 영향력: ${2**villageinfo["town"]}`;
+            container.appendChild(castleDiv);
+
+            for (const category in infos) {
+                container.appendChild(document.createElement('br'));
+
+                for (const key in infos[category]) {
+                    if (villageinfo.hasOwnProperty(key)) {
+                        container.appendChild(document.createTextNode(`${infos[category][key]}: ${villageinfo[key]} `));
+
+                        if (category === 'building') {
+                            if (villageinfo["construction"] === 'none') {
+                                const cost = upgradecost[key][villageinfo[key]];
+                                const time = constructionTime(key, villageinfo[key]);
+                                // container.appendChild(document.createTextNode(`Upgrade Cost: 금${cost[0]}, 쌀${cost[1]} `));
+
+                                const button = document.createElement('button');
+                                button.textContent = `증축 ( ${time} 💰${cost[0]} 🌾${cost[1]})`;
+                                button.onclick = () => {
+                                    performAction('upgrade', key);
+                                };
+                                container.appendChild(button);
+                            } else if (villageinfo["construction"].includes(key)) {
+                                // container.appendChild(document.createTextNode('건설중'));
+                                const serverNow = new Date(villageinfo["now"]);
+                                const clientNow = new Date();
+                                const timeDifference = serverNow.getTime() - clientNow.getTime()
+
+                                const constructionEndTime = villageinfo["construction"].replace(key, "")
+                                const endTime = new Date(constructionEndTime);
+                                endTime.setTime(endTime.getTime() - timeDifference);
+
+                                const timer = document.createElement('span');
+
+                                if (intervalIdForConstruction) {
+                                    clearInterval(intervalIdForConstruction);
+                                }
+
+                                const startNow = new Date()
+                                timer.textContent = ` (남은 시간: ${formatDuration(Math.round((endTime - startNow) / 1000))})`;
+
+                                intervalIdForConstruction = setInterval(() => {
+                                    const now = new Date();
+                                    const remainingTime = Math.round((endTime - now) / 1000);  // Remaining time in seconds
+
+                                    if (remainingTime <= 0) {
+                                        clearInterval(intervalIdForConstruction);
+                                        timer.textContent = ' 건설 완료';
+                                        load(currentVillageId);
+                                    } else {
+                                        timer.textContent = ` (남은 시간: ${formatDuration(remainingTime)})`;
+                                    }
+                                }, 1000);
+
+                                container.appendChild(document.createTextNode('건설중'));
+                                container.appendChild(timer);
+                            }
+
+                        } else if (category === 'branch' && villageinfo["barrack"] != 0) {
+                            if (villageinfo["recruit"] === 'none') {
+                                const button = document.createElement('button');
+                                button.textContent = '모병';
+                                button.onclick = () => {
+                                    // const rate = document.getElementById(key + 'Rate').value;
+                                    // performAction('recruit', key, rate);
+                                    const recruitsize = document.getElementById(key + 'Rate').value;
+                                    performAction('recruit', key, recruitsize);
+                                };
+
+                                const range = document.createElement('input');
+                                range.type = 'range';
+                                range.min = 1;
+                                range.max = recruitcost[villageinfo["barrack"]][1];
+                                range.id = key + 'Rate';
+
+                                const recruitsize = range.value;
+                                const cost = recruitcost[villageinfo['barrack']];
+                                // const recruitsize = Math.round(cost[1] * rate / 100);
+                                // const time = Math.round(cost[2] * rate / 100);
+                                const time = Math.round(cost[2] * recruitsize / range.max)
+                                const text = key === "infantry" ? `+${recruitsize} (${time}분 🌾${time})` : `+${recruitsize} (${time}분 💰${time} 🌾${time})`
+
+                                const recruitInfo = document.createElement('span');
+                                recruitInfo.textContent = text;
+
+                                range.oninput = () => {
+                                    // const rate = range.value;
+                                    const cost = recruitcost[villageinfo['barrack']];
+                                    // const recruitsize = Math.round(cost[1] * rate / 100);
+                                    // const time = Math.round(cost[2] * rate / 100);
+                                    const recruitsize = range.value;
+                                    const time = Math.round(cost[2] * recruitsize / range.max)
+
+                                    const text = key === "infantry" ? `+${recruitsize} (${time}분 🌾${time})` : `+${recruitsize} (${time}분 💰${time} 🌾${time})`
+                                    recruitInfo.textContent = text;
+                                };
+
+                                container.appendChild(button);
+                                container.appendChild(range);
+                                container.appendChild(recruitInfo);
+                                container.appendChild(document.createElement('br'));
+                            } else if (villageinfo["recruit"].includes(key)) {
+                                //container.appendChild(document.createTextNode('모집중'));
+                                const serverNow = new Date(villageinfo["now"]);
+                                const clientNow = new Date();
+                                const timeDifference = serverNow.getTime() - clientNow.getTime()
+
+                                const recruitEndTime = villageinfo["recruit"].replace(key, "")
+                                const endTime = new Date(recruitEndTime);
+                                endTime.setTime(endTime.getTime() - timeDifference);
+
+                                const timer = document.createElement('span');
+
+                                if (intervalIdForRecruit) {
+                                    clearInterval(intervalIdForRecruit);
+                                }
+
+                                const startNow = new Date()
+                                timer.textContent = ` (남은 시간: ${formatDuration(Math.round((endTime - startNow) / 1000))})`;
+
+                                intervalIdForRecruit = setInterval(() => {
+                                    const now = new Date();
+                                    const remainingTime = Math.round((endTime - now) / 1000);  // Remaining time in seconds
+
+                                    if (remainingTime <= 0) {
+                                        clearInterval(intervalIdForRecruit);
+                                        timer.textContent = ' 모집 완료';
+                                        load(currentVillageId);
+                                    } else {
+                                        timer.textContent = ` (남은 시간: ${formatDuration(remainingTime)})`;
+                                    }
+                                }, 1000);
+
+                                container.appendChild(document.createTextNode('모집중'));
+                                container.appendChild(timer);
+                            }
+
+
+                        } else if (category === 'resource') {
+                            const speed = key === 'wood' ? woodspeed[villageinfo['timbercamp']] : foodspeed[villageinfo['farm']];
+                            container.appendChild(document.createTextNode(` (+${speed}/분)`));
+                        }
+
+                        container.appendChild(document.createElement('br'));
+                    }
+                }
+                // container.appendChild(document.createElement('br'));
+            }
+        }
+
+        function displayMessages(reports) {
+            const container = document.getElementById('messages')
+            container.innerHTML = ''
+
+            for (index in reports) {
+                if (index !== 'id') {
+                    const report = document.createElement('div')
+                    report.innerHTML = reports[index]
+                    report.style = "background-color:#222; margin-top:4px;"
+
+                    container.appendChild(report)
+                }
+            }
+        }
+
+        function selectVillage(villageId) {
+            currentVillageId = parseInt(villageId);
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            fetchData('/load', { username, password, villageid: currentVillageId })
+            .then(data => displayVillageInfo(data.villageinfo));
+        }
+
+        function performAction(action, target, recruitsize = 0) {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            let data = {
+                username: username,
+                password: password,
+                villageid: currentVillageId,
+                target: target,
+            };
+
+            if (action === 'recruit') {
+                // data.rate = parseInt(rate);
+                data.recruitsize = parseInt(recruitsize);
+            }
+
+            fetchData(`/${action}`, data)
+            .then(data => {
+                if (data.status === 'failed') {
+                    alert(data.message);
+                } else if (data.status === 'success') {
+                    load(currentVillageId);
+            }});
+        }
+
+        function constructionTime(target, lv) {
+            if (target === "town") {
+                return Math.pow(3, lv) + "분";
+            } else if (["timbercamp", "farm", "barrack", "wall"].includes(target)) {
+                return Math.pow(2, lv) + "분";
+            }
+        }
+
+        function formatDuration(duration) {
+            const date = new Date(0);
+            date.setSeconds(duration); // specify value for SECONDS here
+            const timeString = date.toISOString().substr(11, 8);
+            return timeString;
+        }
+    </script>
+
+    <script>
+
+        let checkdata
+
+        function handleActionChange() {
+            const actionSelect = document.getElementById('actionSelect');
+            const inputsContainer = document.getElementById('inputsContainer');
+            const sendButton = document.getElementById('sendButton')
+            const sendHelp = document.getElementById('sendHelp')
+
+            // Clear the previous inputs
+            inputsContainer.innerHTML = '';
+            sendButton.hidden = true;
+            sendHelp.hidden = true;
+
+            // Add the common inputs for 'conquer', 'raid', and 'supply'
+            if (actionSelect.value !== 'send') {
+                inputsContainer.innerHTML += `
+                    <label for="toid" autofocus>목표 마을 번호</label><br>
+                    <input type="number" id="toid" placeholder="현 번호" value="${currentVillageId}"><br>
+                    <label for="infantry">보병</label><br>
+                    <input type="number" id="infantry" placeholder="보병" value="0"><br>
+                    <label for="cavalry">기병</label><br>
+                    <input type="number" id="cavalry" placeholder="기병" value="0"><br>
+                `;
+
+                sendButton.hidden = false;
+                sendHelp.hidden = false;
+            }
+
+            // Add the additional inputs for 'supply'
+            if (actionSelect.value === 'supply') {
+                inputsContainer.innerHTML += `
+                    <label for="wood">금</label><br>
+                    <input type="number" id="wood" placeholder="금" value="0"><br>
+                    <label for="food">쌀</label><br>
+                    <input type="number" id="food" placeholder="쌀" value="0">
+                `;
+            }
+        }
+
+        function handleSubmit() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const actionSelect = document.getElementById('actionSelect');
+            const toidInput = document.getElementById('toid');
+            const infantryInput = document.getElementById('infantry');
+            const cavalryInput = document.getElementById('cavalry');
+            const woodInput = document.getElementById('wood');
+            const foodInput = document.getElementById('food');
+
+            const data = {
+                username: username,
+                password: password,
+                action: actionSelect.value,
+                fromid: currentVillageId,
+                toid: toidInput ? parseInt(toidInput.value) : undefined,
+                infantry: infantryInput ? parseInt(infantryInput.value) : undefined,
+                cavalry: cavalryInput ? parseInt(cavalryInput.value) : undefined,
+                wood: woodInput ? parseInt(woodInput.value) : undefined,
+                food: foodInput ? parseInt(foodInput.value) : undefined
+            };
+1
+            checkdata = data
+
+            fetchData(`/send`, data)
+            .then(data => {
+                if (data.status === 'failed') {
+                    alert(data.message);
+                } else if (data.status === 'success') {
+                    load(currentVillageId);
+                    document.getElementById('sendTime').innerHTML = `${data.message} 뒤 도착`
+            }});
+
+            // fetch('/send', {
+            //     method: 'POST',
+            //     headers: {
+            //         'Content-Type': 'application/json'
+            //     },
+            //     body: data
+            // })
+            // .then(data => {
+            //     if (data.status === 'failed') {
+            //         alert(data.message);
+            //     } else if (data.status === 'success') {
+            //         load(currentVillageId);
+            // }});
+        }
+    </script>
+    <script>
+        function newuser() {
+            const newuser = document.getElementById("newuser")
+            newuser.hidden = !newuser.hidden
+        }
+
+        function makenewuser() {
+            const username = document.getElementById('newusername').value;
+            const password = document.getElementById('newpassword').value;
+            const faction = parseInt(document.getElementById('newfaction').value);
+            const castle = parseInt(document.getElementById('newcastle').value);
+
+            const newuser = document.getElementById("newuser")
+
+            if (username === '') return
+            if (password === '') return
+
+            const data = {username, password, faction, castle}
+
+            fetchData(`/newuser`, data)
+            .then(data => {
+                if (data.status === 'failed') {
+                    alert(data.message);
+                } else if (data.status === 'success') {
+                    document.getElementById('username').value = document.getElementById('newusername').value;
+                    document.getElementById('password').value = document.getElementById('newpassword').value;
+                    newuser.hidden = !newuser.hidden
+                    alert(`환영합니다 ${username}님`)
+            }});
+        }
+    </script>
+
+    <script>
+        function mainmap() {
+            const container = document.getElementById('mainmap');
+            container.className = "grid-container";
+
+            fetch('/mainmap', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                for (castleid in castles) {
+                    const castleDiv = document.createElement('div')
+                    castleDiv.innerHTML = `${castles[castleid]}`
+                    castleDiv.style = `border: 3px solid black; grid-area:div${castleid}; background-color:#444; padding:3px;`
+                    for (factionid in factions) {
+                        for (row in data) {
+                            if (castleid == data[row]['id'] && factionid == data[row]['faction']) {
+                                const factionDiv = document.createElement('div');
+                                factionDiv.innerHTML = `${factions[factionid]}: ${data[row]['score']}`;
+                                factionDiv.style = `color:${factioncolors[factionid]};`;
+                                castleDiv.appendChild(factionDiv);
+                            }
+                        }
+                    }
+                    container.appendChild(castleDiv);
+                }
+                container.innerHTML += `
+                    <svg style="position:absolute; top:0; left:0; width:100%; height:100%">
+                        <line x1="${1/6*100}%" y1="${2/4*100}%" x2="${2/6*100}%" y2="${1/4*100}%" stroke="black" stroke-width="6" stroke-linecap="round"/>
+                        <line x1="${4/6*100}%" y1="${1/4*100}%" x2="${5/6*100}%" y2="${2/4*100}%" stroke="black" stroke-width="6" stroke-linecap="round"/>
+                        <line x1="${2/6*100}%" y1="${3/4*100}%" x2="${4/6*100}%" y2="${3/4*100}%" stroke="black" stroke-width="6" stroke-linecap="round"/>
+                    </svg>
+                    `;
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        }
+
+        mainmap()
+    </script>
+</body>
 </html>
