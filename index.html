@@ -180,12 +180,13 @@
 
         function fetchData(url, data) {
             dialog.showModal();
+
+            let formData = new FormData();
+            formData.append('myForm', JSON.stringify(data));
+            
             return fetch(`https://chimweb.pythonanywhere.com${url}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
+                body: formData
             })
             .then(response => response.json())
             .then(data => {
@@ -198,7 +199,7 @@
             })
             .catch((error) => {
                 console.error('Error:', error);
-            });
+            });            
         }
 
         function load(chosenvillage = null) {
@@ -605,10 +606,7 @@
             container.className = "grid-container";
 
             fetch(`https://chimweb.pythonanywhere.com/mainmap`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+                method: 'GET'
             })
             .then(response => response.json())
             .then(data => {
