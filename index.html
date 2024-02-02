@@ -263,6 +263,13 @@
             const container = document.getElementById('villageinfo');
             container.innerHTML = '';
 
+            if (intervalIdForConstruction) {
+                clearInterval(intervalIdForConstruction);
+            }
+            if (intervalIdForRecruit) {
+                clearInterval(intervalIdForRecruit);
+            }
+
             const castleDiv = document.createElement('div');
             castleDiv.innerHTML = `위치: ${castles[villageinfo["castleid"]]} &nbsp 영향력: ${2**villageinfo["town"]}`;
             container.appendChild(castleDiv);
@@ -298,9 +305,9 @@
 
                                 const timer = document.createElement('span');
 
-                                if (intervalIdForConstruction) {
-                                    clearInterval(intervalIdForConstruction);
-                                }
+                                // if (intervalIdForConstruction) {
+                                //     clearInterval(intervalIdForConstruction);
+                                // }
 
                                 const startNow = new Date()
                                 timer.textContent = ` (남은 시간: ${formatDuration(Math.round((endTime - startNow) / 1000))})`;
@@ -377,9 +384,9 @@
 
                                 const timer = document.createElement('span');
 
-                                if (intervalIdForRecruit) {
-                                    clearInterval(intervalIdForRecruit);
-                                }
+                                // if (intervalIdForRecruit) {
+                                //     clearInterval(intervalIdForRecruit);
+                                // }
 
                                 const startNow = new Date()
                                 timer.textContent = ` (남은 시간: ${formatDuration(Math.round((endTime - startNow) / 1000))})`;
