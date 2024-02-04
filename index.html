@@ -107,6 +107,7 @@
     <div id="villages"></div>
     <div id="villageinfo"></div>
 
+    <div id="deploytimer" hidden></div>
     <form id="actionForm" hidden>
         <select id="actionSelect" onchange="handleActionChange()">
             <option value="send">출진</option>
@@ -134,11 +135,23 @@
 
     <div id="messages"></div>
     <div id="mainmap"></div>
+    <div style="margin-top: 15px;">
+        <a href="https://chimweb.pythonanywhere.com/static/villages.html">지역별 마을 목록</a>
+    </div>
+    <div style="margin-top: 15px;">
+        <a href="https://chimweb.pythonanywhere.com/static/history.html">최근 기록</a>
+    </div>
+    <div style="margin-top: 30px;">
+        <a href="https://chimhaha.net/">침하하 EEguain</a>
+    </div>
 
     <script>
         let currentVillageId = null;
         let intervalIdForConstruction = null;
         let intervalIdForRecruit = null;
+        let intervalIdForDeploy = null;
+
+        const serverurl = "https://chimweb.pythonanywhere.com" // ""
 
         const infos = {
             resource: {
@@ -183,8 +196,8 @@
 
             let formData = new FormData();
             formData.append('myForm', JSON.stringify(data));
-            
-            return fetch(`https://chimweb.pythonanywhere.com${url}`, {
+
+            return fetch(`${serverurl}${url}`, {
                 method: 'POST',
                 body: formData
             })
@@ -199,7 +212,7 @@
             })
             .catch((error) => {
                 console.error('Error:', error);
-            });            
+            });
         }
 
         function load(chosenvillage = null) {
@@ -217,8 +230,9 @@
             .then(data => {
                 displayVillages(data.villagelist, data.faction, chosenvillage);
                 displayVillageInfo(data.villageinfo);
-                displayMessages(data.report)
-                document.getElementById('actionForm').hidden = false;
+                displayMessages(data.report);
+                displayDeploy(data.villageinfo);
+                // document.getElementById('actionForm').hidden = false;
             });
         }
 
@@ -304,10 +318,6 @@
                                 endTime.setTime(endTime.getTime() - timeDifference);
 
                                 const timer = document.createElement('span');
-
-                                // if (intervalIdForConstruction) {
-                                //     clearInterval(intervalIdForConstruction);
-                                // }
 
                                 const startNow = new Date()
                                 timer.textContent = ` (남은 시간: ${formatDuration(Math.round((endTime - startNow) / 1000))})`;
@@ -436,13 +446,58 @@
             }
         }
 
+        function displayDeploy(villageinfo) {
+            const deployForm = document.getElementById('actionForm')
+            const timer = document.getElementById('deploytimer')
+
+            if (intervalIdForDeploy) {
+                clearInterval(intervalIdForDeploy);
+            }
+
+            if (villageinfo["deploy"] === 'none') {
+                deployForm.hidden = false;
+                timer.hidden = true;
+            } else {
+                deployForm.hidden = true;
+                timer.hidden = false;
+
+                const serverNow = new Date(villageinfo["now"]);
+                const clientNow = new Date();
+                const timeDifference = serverNow.getTime() - clientNow.getTime()
+
+                const deployEndTime = villageinfo["deploy"]
+                const endTime = new Date(deployEndTime);
+                endTime.setTime(endTime.getTime() - timeDifference);
+
+                const startNow = new Date()
+                timer.textContent = ` (출진 도착까지: ${formatDuration(Math.round((endTime - startNow) / 1000))})`;
+
+                intervalIdForDeploy = setInterval(() => {
+                    const serverNow = new Date(villageinfo["now"]);
+
+                    const now = new Date();
+                    const remainingTime = Math.round((endTime - now) / 1000);  // Remaining time in seconds
+
+                    if (remainingTime <= 0) {
+                        clearInterval(intervalIdForDeploy);
+                        timer.textContent = ' 출진 도착';
+                        load(currentVillageId);
+                    } else {
+                        timer.textContent = ` (출진 도착까지: ${formatDuration(remainingTime)})`;
+                    }
+                }, 1000);
+            }
+        }
+
         function selectVillage(villageId) {
             currentVillageId = parseInt(villageId);
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
 
-            fetchData('/load', { username, password, villageid: currentVillageId })
-            .then(data => displayVillageInfo(data.villageinfo));
+            load(currentVillageId);
+
+            // fetchData('/load', { username, password, villageid: currentVillageId })
+            // .then(data => displayVillageInfo(data.villageinfo));
         }
 
         function performAction(action, target, recruitsize = 0) {
@@ -557,7 +612,8 @@
                     alert(data.message);
                 } else if (data.status === 'success') {
                     load(currentVillageId);
-                    document.getElementById('sendTime').innerHTML = `${data.message} 뒤 도착`
+                    // sendButton.hidden = true;
+                    // document.getElementById('sendTime').innerHTML = `${data.message} 뒤 도착`
             }});
 
             // fetch('/send', {
@@ -612,7 +668,7 @@
             const container = document.getElementById('mainmap');
             container.className = "grid-container";
 
-            fetch(`https://chimweb.pythonanywhere.com/mainmap`, {
+            fetch(`${serverurl}/mainmap`, {
                 method: 'GET'
             })
             .then(response => response.json())
