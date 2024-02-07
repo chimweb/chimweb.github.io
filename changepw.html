@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1, width=device-width">
+    <!-- maximum-scale=1 iphone no zooming, but android no pinch zoom-->
+    <title>Game Interface</title>
+</head>
+<body>
+  <div>
+        <input type="text" id="username" placeholder="아이디" autofocus>
+        <input type="password" id="password" placeholder="기존 비밀번호">
+        <input type="newpassword" id="newpassword" placeholder="새 비밀번호">
+        <button onclick="changepw()">Load</button>
+  </div>
+  <script>
+    const serverurl =  "https://chimweb.pythonanywhere.com"
+    
+    function changepw() {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const newpassword = document.getElementById('newpassword').value;
+
+      let formData = new FormData();
+      formData.append('myForm', JSON.stringify({
+              username: `${username}`,
+              password: `${password}`,
+              newpassword: `${newpassword}`
+          }));
+      
+      fetch(`${serverurl}/changepw`, {
+                      method: 'POST',
+                      body: formData
+                  })
+        .then(response => response.json())
+        .then(data => {
+                if (data.status === 'failed') {
+                    alert(data.message);
+                } else if (data.status === 'success') {
+                    alert(data.message);
+            }});
+      }
+    
+  </script>
+</body>
+</html>
