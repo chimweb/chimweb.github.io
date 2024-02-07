@@ -11,6 +11,7 @@
         <input type="text" id="username" placeholder="아이디" autofocus>
         <input type="password" id="password" placeholder="기존 비밀번호">
         <input type="password" id="newpassword" placeholder="새 비밀번호">
+        <input type="password" id="newpasswordagain" placeholder="새 비밀번호 확인">
         <button onclick="changepw()">Change</button>
   </div>
   <script>
@@ -20,6 +21,12 @@
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
       const newpassword = document.getElementById('newpassword').value;
+      const newpasswordagain = document.getElementById('newpasswordagain').value;
+
+      if (newpassword !== newpasswordagain) {
+          alert('새 비밀번호 입력을 다시 해주세요')
+          return
+      }
 
       let formData = new FormData();
       formData.append('myForm', JSON.stringify({
