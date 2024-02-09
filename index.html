@@ -540,11 +540,21 @@
             }
         }
 
+        // function formatDuration(duration) {
+        //     const date = new Date(0);
+        //     date.setSeconds(duration); // specify value for SECONDS here
+        //     const timeString = date.toISOString().substr(11, 8);
+        //     return timeString;
+        // }
         function formatDuration(duration) {
             const date = new Date(0);
             date.setSeconds(duration); // specify value for SECONDS here
             const timeString = date.toISOString().substr(11, 8);
-            return timeString;
+            if (duration < 60 * 60 * 24) {
+                return timeString
+            } else {
+                return `${parseInt(duration / (60 * 60 * 24))}일` + timeString
+            }
         }
     </script>
 
