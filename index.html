@@ -309,10 +309,14 @@
                                 // container.appendChild(document.createTextNode(`Upgrade Cost: 금${cost[0]}, 쌀${cost[1]} `));
 
                                 const button = document.createElement('button');
-                                button.textContent = `증축 ( ${time} 💰${cost[0]} 🌾${cost[1]})`;
-                                button.onclick = () => {
-                                    performAction('upgrade', key);
-                                };
+                                if (villageinfo[key] >= maxLevel) {
+                                    button.textContent = `최대 도달`;
+                                } else {
+                                    button.textContent = `증축 ( ${time} 💰${cost[0]} 🌾${cost[1]})`;
+                                    button.onclick = () => {
+                                        performAction('upgrade', key);
+                                    };
+                                }                            
                                 container.appendChild(button);
                             } else if (villageinfo["construction"].includes(key)) {
                                 // container.appendChild(document.createTextNode('건설중'));
